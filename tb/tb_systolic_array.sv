@@ -67,6 +67,12 @@ module tb_systolic_array;
     );
 
     //=========================================================================
+    // Run-time configurable paths
+    //=========================================================================
+    string data_dir = "data";
+    string test_name = "systolic";
+
+    //=========================================================================
     // Read matrix from hex file (16 values, row-major)
     //=========================================================================
     task automatic read_matrix_hex(
@@ -74,10 +80,12 @@ module tb_systolic_array;
         output reg signed [DATA_WIDTH-1:0] M [0:SIZE-1][0:SIZE-1]
     );
         integer fd, val, idx, scan_ret;
+        string full_path;
         begin
-            fd = $fopen(fname, "r");
+            full_path = {data_dir, "/", fname};
+            fd = $fopen(full_path, "r");
             if (fd == 0) begin
-                $display("ERROR: Cannot open file %s", fname);
+                $display("ERROR: Cannot open file %s", full_path);
                 $finish;
             end
             idx = 0;
@@ -90,7 +98,7 @@ module tb_systolic_array;
             end
             $fclose(fd);
             if (idx != SIZE*SIZE) begin
-                $display("WARNING: Only read %0d values from %s (expected %0d)", idx, fname, SIZE*SIZE);
+                $display("WARNING: Only read %0d values from %s (expected %0d)", idx, full_path, SIZE*SIZE);
             end
         end
     endtask
@@ -251,8 +259,21 @@ module tb_systolic_array;
     // Main test sequence
     //=========================================================================
     initial begin
+        string vcd_path;
+        string saif_path;
+
+        if ($value$plusargs("DATA_DIR=%s", data_dir)) begin
+            $display("Using custom DATA_DIR: %s", data_dir);
+        end
+        if ($value$plusargs("TEST_NAME=%s", test_name)) begin
+            $display("Using custom TEST_NAME: %s", test_name);
+        end
+
+        vcd_path = {"waves/", test_name, ".vcd"};
+        saif_path = {"waves/", test_name, ".saif"};
+
         // VCD dump
-        $dumpfile("waves/systolic.vcd");
+        $dumpfile(vcd_path);
         $dumpvars(0, tb_systolic_array);
 
         // SAIF toggle collection (Xcelium)
@@ -265,9 +286,9 @@ module tb_systolic_array;
         fail_count = 0;
 
         // Read test data
-        $display("Loading test data...");
-        read_matrix_hex("data/activations.hex", A);
-        read_matrix_hex("data/weights.hex", B);
+        $display("Loading test data from %s...", data_dir);
+        read_matrix_hex("activations.hex", A);
+        read_matrix_hex("weights.hex", B);
         compute_golden();
 
         // Run the experiment
@@ -279,8 +300,8 @@ module tb_systolic_array;
         // SAIF dump (Xcelium)
         `ifdef XCELIUM
             $toggle_stop();
-            $toggle_report("waves/activity.saif", 1.0e-9, "tb_systolic_array.dut");
-            $display("SAIF written to waves/activity.saif");
+            $toggle_report(saif_path, 1.0e-9, "tb_systolic_array.dut");
+            $display("SAIF written to %s", saif_path);
         `endif
 
         // Summary
